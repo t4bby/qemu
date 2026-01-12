@@ -45,3 +45,6 @@
 [submodule "tests/lcitool/libvirt-ci"]
 	path = tests/lcitool/libvirt-ci
 	url = https://gitlab.com/libvirt/libvirt-ci.git
+[submodule "contrib/smbios-parser"]
+	path = contrib/smbios-parser
+	url = https://github.com/t4bby/smbios-parser

@@ -30,6 +30,7 @@
 #include "hw/pci/pci_bus.h"
 #include "hw/pci/pci_device.h"
 #include "smbios_build.h"
+#include "hw/firmware/smbios_patcher.h"
 
 /*
  * SMBIOS tables provided by user with '-smbios file=<foo>' option
@@ -1392,21 +1393,23 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
     val = qemu_opt_get(opts, "type");
     if (val) {
         unsigned long type = strtoul(val, NULL, 0);
+        unsigned long bitmap = strtoul(val, NULL, 0);
 
         if (type > SMBIOS_MAX_TYPE) {
             error_setg(errp, "out of range!");
             return;
         }
 
-        if (test_bit(type, smbios_have_binfile_bitmap)) {
-            error_setg(errp, "can't add fields, binary file already loaded!");
-            return;
-        }
+        set_bit(bitmap, smbios_have_binfile_bitmap);
         set_bit(type, smbios_have_fields_bitmap);
 
         switch (type) {
         case 0:
             if (!qemu_opts_validate(opts, qemu_smbios_type0_opts, errp)) {
+                return;
+            }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                smbios_patcher_apply(usr_blobs, usr_blobs_len, type, opts, errp);
                 return;
             }
             save_opt(&smbios_type0.vendor, opts, "vendor");
@@ -1429,6 +1432,10 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             if (!qemu_opts_validate(opts, qemu_smbios_type1_opts, errp)) {
                 return;
             }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                smbios_patcher_apply(usr_blobs, usr_blobs_len, type, opts, errp);
+                return;
+            }
             save_opt(&smbios_type1.manufacturer, opts, "manufacturer");
             save_opt(&smbios_type1.product, opts, "product");
             save_opt(&smbios_type1.version, opts, "version");
@@ -1449,6 +1456,10 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             if (!qemu_opts_validate(opts, qemu_smbios_type2_opts, errp)) {
                 return;
             }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                smbios_patcher_apply(usr_blobs, usr_blobs_len, type, opts, errp);
+                return;
+            }
             save_opt(&type2.manufacturer, opts, "manufacturer");
             save_opt(&type2.product, opts, "product");
             save_opt(&type2.version, opts, "version");
@@ -1460,6 +1471,10 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             if (!qemu_opts_validate(opts, qemu_smbios_type3_opts, errp)) {
                 return;
             }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                smbios_patcher_apply(usr_blobs, usr_blobs_len, type, opts, errp);
+                return;
+            }
             save_opt(&type3.manufacturer, opts, "manufacturer");
             save_opt(&type3.version, opts, "version");
             save_opt(&type3.serial, opts, "serial");
@@ -1468,6 +1483,10 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             return;
         case 4:
             if (!qemu_opts_validate(opts, qemu_smbios_type4_opts, errp)) {
+                return;
+            }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                smbios_patcher_apply(usr_blobs, usr_blobs_len, type, opts, errp);
                 return;
             }
             save_opt(&type4.sock_pfx, opts, "sock_pfx");
@@ -1495,6 +1514,10 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             if (!qemu_opts_validate(opts, qemu_smbios_type8_opts, errp)) {
                 return;
             }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                error_setg(errp, "SMBIOS patcher: not supported for type 8");
+                return;
+            }
             struct type8_instance *t8_i;
             t8_i = g_new0(struct type8_instance, 1);
             save_opt(&t8_i->internal_reference, opts, "internal_reference");
@@ -1506,6 +1529,10 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             return;
         case 9: {
             if (!qemu_opts_validate(opts, qemu_smbios_type9_opts, errp)) {
+                return;
+            }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                error_setg(errp, "SMBIOS patcher: not supported for type 9");
                 return;
             }
             struct type9_instance *t;
@@ -1532,9 +1559,17 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             if (!save_opt_list(&type11.nvalues, &type11.values, opts, errp)) {
                 return;
             }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                error_setg(errp, "SMBIOS patcher: not supported for type 11");
+                return;
+            }
             return;
         case 17:
             if (!qemu_opts_validate(opts, qemu_smbios_type17_opts, errp)) {
+                return;
+            }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                smbios_patcher_apply(usr_blobs, usr_blobs_len, type, opts, errp);
                 return;
             }
             save_opt(&type17.loc_pfx, opts, "loc_pfx");
@@ -1550,6 +1585,10 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             Error *local_err = NULL;
 
             if (!qemu_opts_validate(opts, qemu_smbios_type41_opts, errp)) {
+                return;
+            }
+            if (test_bit(bitmap, smbios_have_binfile_bitmap)) {
+                error_setg(errp, "SMBIOS patcher: not supported for type 41");
                 return;
             }
             t41_i = g_new0(struct type41_instance, 1);

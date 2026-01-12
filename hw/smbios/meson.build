@@ -1,4 +1,6 @@
 smbios_ss = ss.source_set()
+smbios_ss.add(files('../../contrib/smbios-parser/smbios.c'))
+smbios_ss.add(files('smbios_patcher.c'))
 smbios_ss.add(files('smbios.c'))
 smbios_ss.add(when: 'CONFIG_IPMI',
               if_true: files('smbios_type_38.c'),

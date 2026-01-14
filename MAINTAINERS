@@ -3285,6 +3285,8 @@ F: include/system/ioport.h
 F: include/exec/memop.h
 F: include/system/ram_addr.h
 F: include/system/memory.h
+F: include/system/memory_cached.h
+F: include/system/memory_ldst*
 F: include/system/physmem.h
 F: include/system/ramblock.h
 F: include/system/memory_mapping.h
@@ -4461,6 +4463,8 @@ F: docs/devel/testing/functional.rst
 F: scripts/clean_functional_cache.py
 F: tests/functional/meson.build
 F: tests/functional/generic/meson.build
+F: tests/functional/generic/test_linters.py
+F: tests/functional/pylintrc
 F: tests/functional/qemu_test/
 
 Windows Hosted Continuous Integration

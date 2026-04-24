@@ -506,6 +506,18 @@ typedef enum X86Seg {
 #define MSR_CORE_PERF_GLOBAL_CTRL       0x38f
 #define MSR_CORE_PERF_GLOBAL_OVF_CTRL   0x390
 
+#define MSR_AMD64_PERF_CNTR_GLOBAL_STATUS       0xc0000300
+#define MSR_AMD64_PERF_CNTR_GLOBAL_CTL          0xc0000301
+#define MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR   0xc0000302
+
+#define MSR_K7_EVNTSEL0                 0xc0010000
+#define MSR_K7_PERFCTR0                 0xc0010004
+#define MSR_F15H_PERF_CTL0              0xc0010200
+#define MSR_F15H_PERF_CTR0              0xc0010201
+
+#define AMD64_NUM_COUNTERS              4
+#define AMD64_NUM_COUNTERS_CORE         6
+
 #define MSR_MC0_CTL                     0x400
 #define MSR_MC0_STATUS                  0x401
 #define MSR_MC0_ADDR                    0x402
@@ -1086,14 +1098,14 @@ uint64_t x86_cpu_get_supported_feature_word(X86CPU *cpu, FeatureWord w);
 /* Packets which contain IP payload have LIP values */
 #define CPUID_14_0_ECX_LIP              (1U << 31)
 
-/* AMX_INT8 instruction (mirror of CPUID_7_0_EDX_AMX_INT8) */
-#define CPUID_1E_1_EAX_AMX_INT8_MIRROR      (1U << 0)
-/* AMX_BF16 instruction (mirror of CPUID_7_0_EDX_AMX_BF16) */
-#define CPUID_1E_1_EAX_AMX_BF16_MIRROR      (1U << 1)
-/* AMX_COMPLEX instruction (mirror of CPUID_7_1_EDX_AMX_COMPLEX) */
-#define CPUID_1E_1_EAX_AMX_COMPLEX_MIRROR   (1U << 2)
-/* AMX_FP16 instruction (mirror of CPUID_7_1_EAX_AMX_FP16) */
-#define CPUID_1E_1_EAX_AMX_FP16_MIRROR      (1U << 3)
+/* AMX_INT8 instruction (alias of CPUID_7_0_EDX_AMX_INT8) */
+#define CPUID_1E_1_EAX_AMX_INT8_ALIAS      (1U << 0)
+/* AMX_BF16 instruction (alias of CPUID_7_0_EDX_AMX_BF16) */
+#define CPUID_1E_1_EAX_AMX_BF16_ALIAS      (1U << 1)
+/* AMX_COMPLEX instruction (alias of CPUID_7_1_EDX_AMX_COMPLEX) */
+#define CPUID_1E_1_EAX_AMX_COMPLEX_ALIAS   (1U << 2)
+/* AMX_FP16 instruction (alias of CPUID_7_1_EAX_AMX_FP16) */
+#define CPUID_1E_1_EAX_AMX_FP16_ALIAS      (1U << 3)
 /* AMX_FP8 instruction */
 #define CPUID_1E_1_EAX_AMX_FP8              (1U << 4)
 /* AMX_TF32 instruction */
@@ -1317,6 +1329,7 @@ uint64_t x86_cpu_get_supported_feature_word(X86CPU *cpu, FeatureWord w);
 #define MSR_ARCH_CAP_PBRSB_NO           (1U << 24)
 #define MSR_ARCH_CAP_GDS_NO             (1U << 26)
 #define MSR_ARCH_CAP_RFDS_NO            (1U << 27)
+#define MSR_ARCH_CAP_ITS_NO             (1U << 62)
 
 #define MSR_CORE_CAP_SPLIT_LOCK_DETECT  (1U << 5)
 
@@ -1402,6 +1415,7 @@ uint64_t x86_cpu_get_supported_feature_word(X86CPU *cpu, FeatureWord w);
 #define VMX_SECONDARY_EXEC_RDSEED_EXITING           0x00010000
 #define VMX_SECONDARY_EXEC_ENABLE_PML               0x00020000
 #define VMX_SECONDARY_EXEC_XSAVES                   0x00100000
+#define VMX_SECONDARY_EXEC_MODE_BASED_EPT_EXEC      0x00400000
 #define VMX_SECONDARY_EXEC_TSC_SCALING              0x02000000
 #define VMX_SECONDARY_EXEC_ENABLE_USER_WAIT_PAUSE   0x04000000
 
@@ -1737,6 +1751,10 @@ typedef struct {
 #endif
 
 #define MAX_FIXED_COUNTERS 3
+/*
+ * This formula is based on Intel's MSR. The current size also meets AMD's
+ * needs.
+ */
 #define MAX_GP_COUNTERS    (MSR_IA32_PERF_STATUS - MSR_P6_EVNTSEL0)
 
 #define NB_OPMASK_REGS 8
@@ -2270,7 +2288,7 @@ typedef struct CPUArchState {
     QEMUTimer *xen_periodic_timer;
     QemuMutex xen_timers_lock;
 #endif
-#if defined(CONFIG_HVF) || defined(CONFIG_MSHV)
+#if defined(CONFIG_HVF) || defined(CONFIG_MSHV) || defined(CONFIG_WHPX)
     void *emu_mmio_buf;
 #endif
 
@@ -2317,7 +2335,6 @@ struct ArchCPU {
 
     uint32_t hyperv_spinlock_attempts;
     char *hyperv_vendor;
-    bool hyperv_synic_kvm_only;
     uint64_t hyperv_features;
     bool hyperv_passthrough;
     OnOffAuto hyperv_no_nonarch_cs;
@@ -2344,6 +2361,7 @@ struct ArchCPU {
     bool expose_tcg;
     bool migratable;
     bool migrate_smi_count;
+    bool migrate_error_code;
     uint32_t apic_id;
 
     /* Enables publishing of TSC increment and Local APIC bus frequencies to
@@ -2425,9 +2443,6 @@ struct ArchCPU {
     /* Force to enable cpuid 0x1f */
     bool force_cpuid_0x1f;
 
-    /* Enable auto level-increase for all CPUID leaves */
-    bool full_cpuid_auto_level;
-
     /*
      * Compatibility bits for old machine types (PC machine v6.0 and older).
      * Only advertise CPUID leaves defined by the vendor.
@@ -2442,9 +2457,6 @@ struct ArchCPU {
 
     /* Only advertise TOPOEXT features that AMD defines */
     bool amd_topoext_features_only;
-
-    /* Enable auto level-increase for Intel Processor Trace leave */
-    bool intel_pt_auto_level;
 
     /* if true fill the top bits of the MTRR_PHYSMASKn variable range */
     bool fill_mtrr_mask;
@@ -2733,6 +2745,7 @@ void cpu_sync_avx_hflag(CPUX86State *env);
 typedef enum X86ASIdx {
     X86ASIdx_MEM = 0,
     X86ASIdx_SMM = 1,
+    X86ASIdx_MAX = X86ASIdx_SMM
 } X86ASIdx;
 
 #ifndef CONFIG_USER_ONLY

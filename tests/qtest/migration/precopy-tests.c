@@ -289,45 +289,6 @@ static void test_precopy_fd_socket(char *name, MigrateCommon *args)
 
     test_precopy_common(args);
 }
-
-static void *migrate_hook_start_precopy_fd_file(QTestState *from,
-                                                QTestState *to)
-{
-    g_autofree char *file = g_strdup_printf("%s/%s", tmpfs, FILE_TEST_FILENAME);
-    int src_flags = O_CREAT | O_RDWR;
-    int dst_flags = O_CREAT | O_RDWR;
-    int fds[2];
-
-    fds[0] = open(file, src_flags, 0660);
-    assert(fds[0] != -1);
-
-    fds[1] = open(file, dst_flags, 0660);
-    assert(fds[1] != -1);
-
-
-    qtest_qmp_fds_assert_success(to, &fds[0], 1,
-                                 "{ 'execute': 'getfd',"
-                                 "  'arguments': { 'fdname': 'fd-mig' }}");
-
-    qtest_qmp_fds_assert_success(from, &fds[1], 1,
-                                 "{ 'execute': 'getfd',"
-                                 "  'arguments': { 'fdname': 'fd-mig' }}");
-
-    close(fds[0]);
-    close(fds[1]);
-
-    return NULL;
-}
-
-static void test_precopy_fd_file(char *name, MigrateCommon *args)
-{
-    args->listen_uri = "defer";
-    args->connect_uri = "fd:fd-mig";
-    args->start_hook = migrate_hook_start_precopy_fd_file;
-    args->end_hook = migrate_hook_end_fd;
-
-    test_file_common(args, true);
-}
 #endif /* _WIN32 */
 
 /*
@@ -584,8 +545,7 @@ static void test_multifd_tcp_cancel(MigrateCommon *args, bool postcopy_ram)
     migrate_cancel(from);
 
     /* Make sure QEMU process "to" exited */
-    qtest_set_expected_status(to, EXIT_FAILURE);
-    qtest_wait_qemu(to);
+    migration_event_wait(to, "failed");
     qtest_quit(to);
 
     /*
@@ -673,7 +633,7 @@ static void test_cancel_src_after_cancelled(QTestState *from, QTestState *to,
                                             const char *uri, const char *phase,
                                             MigrateStart *args)
 {
-    migrate_incoming_qmp(to, uri, NULL, "{ 'exit-on-error': false }");
+    migrate_incoming_qmp(to, uri, NULL, "{}");
 
     wait_for_serial("src_serial");
     migrate_ensure_converge(from);
@@ -698,7 +658,7 @@ static void test_cancel_src_after_complete(QTestState *from, QTestState *to,
                                            const char *uri, const char *phase,
                                            MigrateStart *args)
 {
-    migrate_incoming_qmp(to, uri, NULL, "{ 'exit-on-error': false }");
+    migrate_incoming_qmp(to, uri, NULL, "{}");
 
     wait_for_serial("src_serial");
     migrate_ensure_converge(from);
@@ -729,7 +689,7 @@ static void test_cancel_src_after_none(QTestState *from, QTestState *to,
     wait_for_serial("src_serial");
     migrate_cancel(from);
 
-    migrate_incoming_qmp(to, uri, NULL, "{ 'exit-on-error': false }");
+    migrate_incoming_qmp(to, uri, NULL, "{}");
 
     migrate_ensure_converge(from);
     migrate_qmp(from, to, uri, NULL, "{}");
@@ -748,7 +708,7 @@ static void test_cancel_src_pre_switchover(QTestState *from, QTestState *to,
     migrate_set_capability(from, "multifd", true);
     migrate_set_capability(to, "multifd", true);
 
-    migrate_incoming_qmp(to, uri, NULL, "{ 'exit-on-error': false }");
+    migrate_incoming_qmp(to, uri, NULL, "{}");
 
     wait_for_serial("src_serial");
     migrate_ensure_converge(from);
@@ -1110,11 +1070,10 @@ static void test_dirty_limit(char *name, MigrateCommon *args)
     args->start.hide_stderr = true;
     args->start.use_dirty_ring = true;
 
-    args->listen_uri = uri;
     args->connect_uri = uri;
 
     /* Start src, dst vm */
-    if (migrate_start(&from, &to, args->listen_uri, &args->start)) {
+    if (migrate_start(&from, &to, "defer", &args->start)) {
         return;
     }
 
@@ -1122,6 +1081,7 @@ static void test_dirty_limit(char *name, MigrateCommon *args)
     migrate_dirty_limit_wait_showup(from, dirtylimit_period, dirtylimit_value);
 
     /* Start migrate */
+    migrate_incoming_qmp(to, args->connect_uri, NULL, "{}");
     migrate_qmp(from, to, args->connect_uri, NULL, "{}");
 
     /* Wait for dirty limit throttle begin */
@@ -1140,7 +1100,6 @@ static void test_dirty_limit(char *name, MigrateCommon *args)
 
     /* destination always fails after cancel */
     migration_event_wait(to, "failed");
-    qtest_set_expected_status(to, EXIT_FAILURE);
     qtest_quit(to);
 
     /* Check if dirty limit throttle switched off, set timeout 1ms */
@@ -1255,8 +1214,6 @@ void migration_test_add_precopy(MigrationTestEnv *env)
 #ifndef _WIN32
     migration_test_add("/migration/precopy/fd/tcp",
                        test_precopy_fd_socket);
-    migration_test_add("/migration/precopy/fd/file",
-                       test_precopy_fd_file);
 #endif
 
     /*
@@ -1265,8 +1222,7 @@ void migration_test_add_precopy(MigrationTestEnv *env)
     if (g_test_slow()) {
         migration_test_add("/migration/auto_converge",
                            test_auto_converge);
-        if (g_str_equal(env->arch, "x86_64") &&
-            env->has_kvm && env->has_dirty_ring) {
+        if (g_str_equal(env->arch, "x86_64") && env->has_dirty_ring) {
             migration_test_add("/dirty_limit",
                                test_dirty_limit);
         }
@@ -1289,7 +1245,7 @@ void migration_test_add_precopy(MigrationTestEnv *env)
     }
 
     /* ensure new status don't go unnoticed */
-    assert(MIGRATION_STATUS__MAX == 16);
+    assert(MIGRATION_STATUS__MAX == 17);
 
     for (int i = MIGRATION_STATUS_NONE; i < MIGRATION_STATUS__MAX; i++) {
         switch (i) {
@@ -1301,6 +1257,7 @@ void migration_test_add_precopy(MigrationTestEnv *env)
         case MIGRATION_STATUS_POSTCOPY_PAUSED:
         case MIGRATION_STATUS_POSTCOPY_RECOVER_SETUP:
         case MIGRATION_STATUS_POSTCOPY_RECOVER:
+        case MIGRATION_STATUS_FAILING:
             continue;
         default:
             migration_test_add_suffix("/migration/cancel/src/after/",

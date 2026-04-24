@@ -86,7 +86,7 @@ int cpu_asidx_from_attrs(CPUState *cpu, MemTxAttrs attrs)
 
     if (cpu->cc->sysemu_ops->asidx_from_attrs) {
         ret = cpu->cc->sysemu_ops->asidx_from_attrs(cpu, attrs);
-        assert(ret < cpu->num_ases && ret >= 0);
+        assert(ret <= cpu->cc->max_as && ret >= 0);
     }
     return ret;
 }
@@ -127,10 +127,10 @@ int cpu_write_elf64_note(WriteCoreDumpFunction f, CPUState *cpu,
     return (*cpu->cc->sysemu_ops->write_elf64_note)(f, cpu, cpuid, opaque);
 }
 
-bool cpu_virtio_is_big_endian(CPUState *cpu)
+bool cpu_internal_is_big_endian(CPUState *cpu)
 {
-    if (cpu->cc->sysemu_ops->virtio_is_big_endian) {
-        return cpu->cc->sysemu_ops->virtio_is_big_endian(cpu);
+    if (cpu->cc->sysemu_ops->internal_is_big_endian) {
+        return cpu->cc->sysemu_ops->internal_is_big_endian(cpu);
     }
     return target_big_endian();
 }

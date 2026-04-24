@@ -15,6 +15,7 @@ system_ss.add(files(
   'ui-hmp-cmds.c',
   'ui-qmp-cmds.c',
   'util.c',
+  'vgafont.c',
 ))
 system_ss.add(when: pixman, if_true: files('console-vc.c'), if_false: files('console-vc-stubs.c'))
 if dbus_display
@@ -41,7 +42,7 @@ vnc_ss.add(files(
   'vnc-jobs.c',
   'vnc-clipboard.c',
 ))
-vnc_ss.add(zlib, jpeg)
+vnc_ss.add(zlib, jpeg, png)
 vnc_ss.add(when: sasl, if_true: files('vnc-auth-sasl.c'))
 system_ss.add_all(when: [vnc, pixman], if_true: vnc_ss)
 system_ss.add(when: vnc, if_false: files('vnc-stubs.c'))
@@ -70,6 +71,7 @@ if opengl.found()
   ui_modules += {'egl-headless' : egl_headless_ss}
 endif
 
+dbus_display1 = files()
 if dbus_display
   dbus_ss = ss.source_set()
   env = environment()
@@ -88,6 +90,8 @@ if dbus_display
                                           '--interface-prefix', 'org.qemu.',
                                           '--c-namespace', 'QemuDBus',
                                           '--generate-c-code', '@BASENAME@'])
+  dbus_display1_h = declare_dependency(dependencies: [gio],
+                                       sources: dbus_display1[0])
   dbus_ss.add(when: gio,
               if_true: [files(
                 'dbus-chardev.c',

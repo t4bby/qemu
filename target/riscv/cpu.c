@@ -83,6 +83,7 @@ void cpu_set_exception_base(int vp_index, target_ulong address)
         qemu_log_mask(LOG_GUEST_ERROR,
                       "cpu_set_exception_base: invalid vp_index: %u",
                       vp_index);
+        return;
     }
     cpu = RISCV_CPU(cs);
     cpu->env.resetvec = address;
@@ -222,6 +223,7 @@ const RISCVIsaExtData isa_edata_arr[] = {
     ISA_EXT_DATA_ENTRY(smcsrind, PRIV_VERSION_1_13_0, ext_smcsrind),
     ISA_EXT_DATA_ENTRY(smdbltrp, PRIV_VERSION_1_13_0, ext_smdbltrp),
     ISA_EXT_DATA_ENTRY(smepmp, PRIV_VERSION_1_12_0, ext_smepmp),
+    ISA_EXT_DATA_ENTRY(smpmpmt, PRIV_VERSION_1_12_0, ext_smpmpmt),
     ISA_EXT_DATA_ENTRY(smrnmi, PRIV_VERSION_1_12_0, ext_smrnmi),
     ISA_EXT_DATA_ENTRY(smmpm, PRIV_VERSION_1_13_0, ext_smmpm),
     ISA_EXT_DATA_ENTRY(smnpm, PRIV_VERSION_1_13_0, ext_smnpm),
@@ -795,10 +797,11 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type)
 #endif
 }
 
-static void riscv_cpu_disas_set_info(CPUState *s, disassemble_info *info)
+static void riscv_cpu_disas_set_info(const CPUState *s, disassemble_info *info)
 {
-    RISCVCPU *cpu = RISCV_CPU(s);
-    CPURISCVState *env = &cpu->env;
+    const RISCVCPU *cpu = RISCV_CPU(s);
+    const CPURISCVState *env = &cpu->env;
+
     info->target_info = &cpu->cfg;
 
     /*
@@ -1274,6 +1277,7 @@ const RISCVCPUMultiExtConfig riscv_cpu_extensions[] = {
     MULTI_EXT_CFG_BOOL("smaia", ext_smaia, false),
     MULTI_EXT_CFG_BOOL("smdbltrp", ext_smdbltrp, false),
     MULTI_EXT_CFG_BOOL("smepmp", ext_smepmp, false),
+    MULTI_EXT_CFG_BOOL("smpmpmt", ext_smpmpmt, false),
     MULTI_EXT_CFG_BOOL("smrnmi", ext_smrnmi, false),
     MULTI_EXT_CFG_BOOL("smmpm", ext_smmpm, false),
     MULTI_EXT_CFG_BOOL("smnpm", ext_smnpm, false),
@@ -2913,7 +2917,7 @@ void riscv_isa_write_fdt(RISCVCPU *cpu, void *fdt, char *nodename)
     riscv_isa = riscv_isa_string(cpu);
     qemu_fdt_setprop_string(fdt, nodename, "riscv,isa", riscv_isa);
 
-    snprintf(isa_base, maxlen, "rv%di", xlen);
+    snprintf(isa_base, maxlen, "rv%di", xlen & 0xFF);
     qemu_fdt_setprop_string(fdt, nodename, "riscv,isa-base", isa_base);
 
     isa_extensions = riscv_isa_extensions_list(cpu, &count);

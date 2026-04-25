@@ -9730,6 +9730,23 @@ void x86_cpu_expand_features(X86CPU *cpu, Error **errp)
         env->cpuid_xlevel2 = env->cpuid_min_xlevel2;
     }
 
+    /*
+     * When running with an accelerator that exposes the host CPUID
+     * directly (passthrough), limit the standard CPUID leaf to 0x1E so
+     * the guest sees the same ceiling as "-cpu host,level=30".
+     * This fixes BSODs in Windows when running nested virtualization 
+     * on newer Intel CPUs (12th generation+).
+     */
+    if (accel_uses_host_cpuid() && IS_INTEL_CPU(env) &&
+        (cpu->hyperv_features || cpu->hyperv_passthrough)) {
+        if (env->cpuid_min_level > 0x1E) {
+            env->cpuid_min_level = 0x1E;
+        }
+        if (env->cpuid_level > 0x1E) {
+            env->cpuid_level = 0x1E;
+        }
+    }
+
     if (kvm_enabled() && !kvm_hyperv_expand_features(cpu, errp)) {
         return;
     }
